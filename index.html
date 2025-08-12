@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Amigo Secreto</title>
+  <meta name="description" content="App simple para agregar amigos y sortear un amigo secreto." />
+  <style>
+    :root{
+      --bg:#0f172a; /* slate-900 */
+      --card:#111827; /* gray-900 */
+      --muted:#94a3b8; /* slate-400 */
+      --text:#e5e7eb; /* gray-200 */
+      --accent:#22d3ee; /* cyan-400 */
+      --accent-2:#a78bfa; /* violet-400 */
+      --danger:#f87171; /* red-400 */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1000px 600px at 20% -10%, rgba(167,139,250,.25), transparent),
+                  radial-gradient(800px 500px at 120% 10%, rgba(34,211,238,.15), transparent),
+                  var(--bg);
+      color:var(--text);
+      display:grid; place-items:center; padding:24px;
+    }
+    .app{
+      width:100%; max-width:680px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08); border-radius:20px; padding:24px; backdrop-filter: blur(6px);
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    h1{margin:0 0 8px; font-size:clamp(24px, 3vw, 32px); letter-spacing:.2px}
+    p.sub{margin:0 0 18px; color:var(--muted)}
+    .row{display:flex; gap:10px; align-items:center}
+    input[type="text"]{
+      flex:1; padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      background:#0b1220; color:var(--text); outline:none; font-size:16px;
+    }
+    input::placeholder{color:#64748b}
+    button{
+      border:0; padding:12px 16px; border-radius:12px; cursor:pointer; font-weight:600; font-size:15px;
+      color:#0b1220; background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: transform .05s ease, filter .2s ease, opacity .2s ease;
+    }
+    button:disabled{opacity:.5; cursor:not-allowed; filter:saturate(.5)}
+    button:active{transform:translateY(1px)}
+    .stack{display:grid; gap:16px; margin-top:18px}
+    .hint{font-size:14px; color:var(--muted)}
+    ul#lista{list-style:none; padding:0; margin:0; display:grid; gap:10px}
+    .chip{
+      display:flex; align-items:center; gap:8px; background:#0b1220; border:1px solid rgba(255,255,255,.08);
+      padding:10px 12px; border-radius:999px; width:fit-content; max-width:100%;
+    }
+    .name{white-space:nowrap; text-overflow:ellipsis; overflow:hidden}
+    .remove{
+      border:0; background:transparent; color:var(--muted); cursor:pointer; padding:6px; border-radius:8px
+    }
+    .remove:hover{color:#fff}
+    .actions{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-top:8px}
+    .alert{color:var(--danger); font-weight:600}
+    .result{
+      margin-top:14px; padding:14px; border-radius:14px; background:rgba(34,211,238,.08);
+      border:1px solid rgba(34,211,238,.25); display:none
+    }
+    .result.show{display:block; animation:pop .3s ease}
+    @keyframes pop{from{transform:scale(.98); opacity:.6} to{transform:scale(1); opacity:1}}
+    .divider{height:1px; background:linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent); margin:10px 0}
+    footer{margin-top:18px; font-size:12px; color:var(--muted)}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+  </style>
+</head>
+<body>
+  <main class="app" role="main">
+    <h1>🎁 Amigo Secreto</h1>
+    <p class="sub">Escribe algunos nombres y realiza un sorteo aleatorio para elegir al amigo secreto.</p>
+
+    <form id="form" class="stack" autocomplete="off">
+      <label class="sr-only" for="nombre">Nombre del amigo</label>
+      <div class="row">
+        <input id="nombre" type="text" placeholder="Escribe un nombre..." aria-describedby="ayuda" />
+        <button id="btnAgregar" type="submit">Adicionar</button>
+      </div>
+      <div class="actions">
+        <span id="ayuda" class="hint">Presiona <kbd>Enter</kbd> o el botón para agregar. Evita duplicados 😉</span>
+        <button id="btnSortear" type="button" disabled>Sortear Amigo</button>
+      </div>
+      <span id="mensaje" class="alert" aria-live="polite"></span>
+    </form>
+
+    <div class="divider"></div>
+
+    <section aria-labelledby="titulo-lista">
+      <h2 id="titulo-lista" class="sr-only">Lista de amigos</h2>
+      <ul id="lista"></ul>
+    </section>
+
+    <div id="resultado" class="result" role="status" aria-live="polite"></div>
+
+    <footer>
+      Hecho con ♥ para el constante aprendizaje.
+    </footer>
+  </main>
+
+  <script>
+    (function(){
+      const input = document.getElementById('nombre');
+      const form = document.getElementById('form');
+      const lista = document.getElementById('lista');
+      const btnSortear = document.getElementById('btnSortear');
+      const mensaje = document.getElementById('mensaje');
+      const resultado = document.getElementById('resultado');
+
+      /** Estado interno */
+      let amigos = [];
+
+      /** Utilidades */
+      const normaliza = (s) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+      const limpiarMensaje = () => mensaje.textContent = '';
+      const mostrarError = (txt) => { mensaje.textContent = txt; };
+
+      const render = () => {
+        // Renderiza la lista de chips
+        lista.innerHTML = '';
+        amigos.forEach((nombre, i) => {
+          const li = document.createElement('li');
+          const chip = document.createElement('div');
+          chip.className = 'chip';
+
+          const span = document.createElement('span');
+          span.className = 'name';
+          span.textContent = nombre;
+
+          const btn = document.createElement('button');
+          btn.className = 'remove';
+          btn.setAttribute('aria-label', `Eliminar ${nombre}`);
+          btn.innerHTML = '✕';
+          btn.addEventListener('click', () => {
+            amigos.splice(i, 1);
+            actualizar();
+          });
+
+          chip.appendChild(span);
+          chip.appendChild(btn);
+          li.appendChild(chip);
+          lista.appendChild(li);
+        });
+
+        btnSortear.disabled = amigos.length === 0;
+      };
+
+      const actualizar = () => {
+        limpiarMensaje();
+        resultado.classList.remove('show');
+        resultado.textContent = '';
+        render();
+      };
+
+      const agregar = (valor) => {
+        const nombre = (valor ?? '').trim();
+        if (!nombre) {
+          mostrarError('Por favor, escribe un nombre válido.');
+          alert('Ingresa un nombre válido.');
+          return;
+        }
+        // Evitar duplicados (ignorando tildes y mayúsculas)
+        const clave = normaliza(nombre);
+        const existe = amigos.some(n => normaliza(n) === clave);
+        if (existe) {
+          mostrarError('Ese nombre ya está en la lista.');
+          return;
+        }
+        amigos.push(nombre);
+        input.value = '';
+        input.focus();
+        actualizar();
+      };
+
+      const sortear = () => {
+        if (amigos.length === 0) return;
+        // Pequeña animación de "suspenso"
+        const vueltas = Math.min(12, Math.max(6, amigos.length * 2));
+        let i = 0;
+        resultado.classList.add('show');
+        const id = setInterval(() => {
+          const idx = Math.floor(Math.random() * amigos.length);
+          resultado.textContent = `🎉 El amigo secreto es: ${amigos[idx]} `;
+          if (++i >= vueltas) { clearInterval(id); }
+        }, 100);
+      };
+
+      // Eventos
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        agregar(input.value);
+      });
+      btnSortear.addEventListener('click', sortear);
+
+      // Accesibilidad: agregar con Ctrl/Cmd + Enter
+      input.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          agregar(input.value);
+        }
+      });
+
+      // Estado inicial
+      render();
+      input.focus();
+    })();
+  </script>
+</body>
+</html>
